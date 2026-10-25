@@ -1,4 +1,3 @@
-
 use age::secrecy::SecretString;
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
