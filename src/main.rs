@@ -87,6 +87,31 @@ fn new_password() -> Result<String> {
         .prompt()?)
 }
 
+/// Runs `f` while a spinner animates on stderr (age's scrypt takes ~1 s by design).
+fn spin<T>(msg: &str, f: impl FnOnce() -> T) -> T {
+    use std::io::IsTerminal;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    if !std::io::stderr().is_terminal() {
+        return f(); // piped or redirected: no animation garbage
+    }
+    let done = AtomicBool::new(false);
+    std::thread::scope(|s| {
+        s.spawn(|| {
+            for c in "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏".chars().cycle() {
+                if done.load(Ordering::Relaxed) {
+                    break;
+                }
+                eprint!("\r{c} {msg}");
+                std::thread::sleep(std::time::Duration::from_millis(80));
+            }
+            eprint!("\r\x1B[2K"); // clear the spinner line
+        });
+        let out = f();
+        done.store(true, Ordering::Relaxed);
+        out
+    })
+}
+
 fn prompt_secret() -> Result<String> {
     Ok(Password::new("Secret (base32):")
         .without_confirmation()
