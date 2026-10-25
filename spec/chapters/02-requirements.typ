@@ -7,7 +7,7 @@
 + `otpdash` with no arguments asks for the password, then opens the *dashboard*.
 + The password is asked for *once* per session. Everything after that uses the decrypted vault in memory.
 + Every change (add, remove, rename, import, change password) is *saved immediately*. If you quit or press Ctrl-C at any point, nothing is lost.
-+ *First run* (no DB file): ask for a *new* password, entered twice. A typo here would lock you out.
++ *First run* (no DB file): ask for a *new* password, entered twice (a typo here would lock you out), and create the empty DB straight away, so the next run asks for that password.
 + A *wrong password* prints `Error: wrong password` and exits with code 1. It never panics, and nothing is written.
 
 == Dashboard

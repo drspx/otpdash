@@ -24,7 +24,7 @@ handle prompts and printing, so test those by hand with the acceptance checklist
   columns: (auto, 1fr),
   [*Test*], [*Fails if…*],
   [`rfc6238_vector`], [The TOTP maths, the base32 alphabet or the padding is wrong. It checks against the official RFC vector.],
-  [`save_load_and_wrong_password`], [Encryption or serialisation breaks, normalisation or rename breaks, a wrong password is accepted, or `set_password` doesn't re-encrypt.],
+  [`save_load_and_wrong_password`], [The first open doesn't create the DB, encryption or serialisation breaks, normalisation or rename breaks, a wrong password is accepted, or `set_password` doesn't re-encrypt.],
   [`import_rustotpony_export_and_own_roundtrip`], [Escape-code junk breaks the import, the stale key is used, duplicates aren't skipped, or export and import disagree.],
 )
 

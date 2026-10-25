@@ -1,5 +1,5 @@
-use age::secrecy::Secret;
-use anyhow::{bail, Context, Result};
+use age::secrecy::SecretString;
+use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::io::{Read, Write};
@@ -36,8 +36,15 @@ pub struct Vault {
 
 impl Vault {
     pub fn open(path: PathBuf, pass: String) -> Result<Self> {
-        let entries = load(&path, &pass)?;
-        Ok(Self { path, pass, entries })
+        let v = Self {
+            entries: load(&path, &pass)?,
+            path,
+            pass,
+        };
+        if !v.path.exists() {
+            v.save()?; // first run: create the DB now, so the next run asks for this password
+        }
+        Ok(v)
     }
 
     fn save(&self) -> Result<()> {
@@ -51,12 +58,15 @@ impl Vault {
         let secret = normalize(secret);
         code(&secret, 0)?; // fail now on bad base32, not at show time
         let username = username.to_string();
-        self.entries.insert(name.to_string(), Entry { secret, username });
+        self.entries
+            .insert(name.to_string(), Entry { secret, username });
         self.save()
     }
 
     pub fn remove(&mut self, name: &str) -> Result<()> {
-        self.entries.remove(name).with_context(|| format!("'{name}' not found"))?;
+        self.entries
+            .remove(name)
+            .with_context(|| format!("'{name}' not found"))?;
         self.save()
     }
 
@@ -64,7 +74,10 @@ impl Vault {
         if self.entries.contains_key(new) {
             bail!("'{new}' already exists");
         }
-        let entry = self.entries.remove(old).with_context(|| format!("'{old}' not found"))?;
+        let entry = self
+            .entries
+            .remove(old)
+            .with_context(|| format!("'{old}' not found"))?;
         self.entries.insert(new.to_string(), entry);
         self.save()
     }
@@ -89,7 +102,13 @@ impl Vault {
             }
             let secret = normalize(&app.secret);
             code(&secret, 0).with_context(|| format!("bad secret for '{}'", app.name))?;
-            self.entries.insert(app.name, Entry { secret, username: app.username });
+            self.entries.insert(
+                app.name,
+                Entry {
+                    secret,
+                    username: app.username,
+                },
+            );
             added += 1;
         }
         self.save()?;
@@ -113,18 +132,32 @@ impl Vault {
     }
 
     pub fn code_for(&self, name: &str, t: u64) -> Result<String> {
-        let e = self.entries.get(name).with_context(|| format!("'{name}' not found"))?;
+        let e = self
+            .entries
+            .get(name)
+            .with_context(|| format!("'{name}' not found"))?;
         code(&e.secret, t)
     }
 
     /// `CODE  NAME  USERNAME` lines, names padded to one width, filtered case-insensitively.
     pub fn lines(&self, filter: &str, t: u64) -> Result<Vec<String>> {
         let f = filter.to_lowercase();
-        let w = self.entries.keys().map(|k| k.chars().count()).max().unwrap_or(0);
+        let w = self
+            .entries
+            .keys()
+            .map(|k| k.chars().count())
+            .max()
+            .unwrap_or(0);
         self.entries
             .iter()
             .filter(|(name, _)| name.to_lowercase().contains(&f))
-            .map(|(name, e)| Ok(format!("{}  {name:<w$}  {}", code(&e.secret, t)?, e.username)))
+            .map(|(name, e)| {
+                Ok(format!(
+                    "{}  {name:<w$}  {}",
+                    code(&e.secret, t)?,
+                    e.username
+                ))
+            })
             .collect()
     }
 }
@@ -133,11 +166,17 @@ pub fn db_path() -> PathBuf {
     if let Some(p) = std::env::var_os("OTPDASH_DB") {
         return p.into();
     }
-    dirs::config_dir().expect("no config dir").join("otpdash").join("db.age")
+    dirs::config_dir()
+        .expect("no config dir")
+        .join("otpdash")
+        .join("db.age")
 }
 
 pub fn now() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
 }
 
 pub fn seconds_left(t: u64) -> u64 {
@@ -153,9 +192,12 @@ fn normalize(secret: &str) -> String {
 }
 
 fn code(secret: &str, t: u64) -> Result<String> {
-    let key = base32::decode(base32::Alphabet::Rfc4648 { padding: false }, secret)
-        .context("secret is not valid base32")?;
-    Ok(totp_lite::totp_custom::<totp_lite::Sha1>(30, 6, &key, t))
+    let key = totp_rs::Secret::try_from_base32(secret).context("secret is not valid base32")?;
+    // ponytail: build_noncompliant skips the 128-bit minimum; many services use 80-bit secrets
+    let totp = totp_rs::Builder::new()
+        .with_secret(key)
+        .build_noncompliant(); // SHA-1, 6 digits, 30 s
+    Ok(totp.generate(t).to_string())
 }
 
 fn load(path: &Path, pass: &str) -> Result<Entries> {
@@ -164,12 +206,13 @@ fn load(path: &Path, pass: &str) -> Result<Entries> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Entries::new()),
         Err(e) => return Err(e).with_context(|| format!("reading {}", path.display())),
     };
-    let decryptor = match age::Decryptor::new(&data[..])? {
-        age::Decryptor::Passphrase(d) => d,
-        _ => bail!("{} is not passphrase-encrypted", path.display()),
-    };
+    let decryptor = age::Decryptor::new(&data[..])?;
+    if !decryptor.is_scrypt() {
+        bail!("{} is not passphrase-encrypted", path.display());
+    }
+    let identity = age::scrypt::Identity::new(SecretString::from(pass.to_owned()));
     let mut reader = decryptor
-        .decrypt(&Secret::new(pass.to_owned()), None)
+        .decrypt(std::iter::once(&identity as &dyn age::Identity))
         .context("wrong password")?;
     let mut json = Vec::new();
     reader.read_to_end(&mut json)?;
@@ -179,7 +222,7 @@ fn load(path: &Path, pass: &str) -> Result<Entries> {
 fn save(path: &Path, pass: &str, entries: &Entries) -> Result<()> {
     let json = serde_json::to_vec(entries)?;
     let mut encrypted = Vec::new();
-    let mut writer = age::Encryptor::with_user_passphrase(Secret::new(pass.to_owned()))
+    let mut writer = age::Encryptor::with_user_passphrase(SecretString::from(pass.to_owned()))
         .wrap_output(&mut encrypted)?;
     writer.write_all(&json)?;
     writer.finish()?;
@@ -187,9 +230,12 @@ fn save(path: &Path, pass: &str, entries: &Entries) -> Result<()> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    // write-then-rename: a crash leaves either the old file or the new one, never half
+    // write, fsync, rename: a crash or power cut leaves either the old file or the new one, never half
+    // ponytail: the directory isn't fsynced, so a power cut right after rename can still revert to the old file
     let tmp = path.with_extension("tmp");
-    std::fs::write(&tmp, encrypted)?;
+    let mut f = std::fs::File::create(&tmp)?;
+    f.write_all(&encrypted)?;
+    f.sync_all()?;
     std::fs::rename(&tmp, path)?;
     Ok(())
 }
@@ -207,12 +253,16 @@ mod tests {
     #[test]
     fn rfc6238_vector() {
         // RFC 6238 appendix B: ASCII "12345678901234567890", T=59 -> 94287082 (last 6 digits)
-        assert_eq!(code("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", 59).unwrap(), "287082");
+        assert_eq!(
+            code("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", 59).unwrap(),
+            "287082"
+        );
     }
 
     #[test]
     fn save_load_and_wrong_password() {
         let mut v = temp_vault("otpdash_test_a.age");
+        assert!(v.path.exists(), "first open creates the DB");
         v.add("github", "me", "jbsw y3dp ehpk 3pxp").unwrap();
         v.rename("github", "gh").unwrap();
         assert!(v.rename("nope", "x").is_err());

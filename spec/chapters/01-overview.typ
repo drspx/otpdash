@@ -36,9 +36,10 @@ otpdash export > backup.json
 == Goals
 
 - *Log in once.* Run `otpdash` and you get a dashboard you can keep using until you quit.
-- *Small.* About 500 lines in three files, which you write yourself.
+- *Small.* About 570 lines in three files, tests included, which you write yourself.
 - *Imports #old.* It reads the JSON from `totp export`, and its own exports use the same format.
 - *Coexists with #old.* It has a different binary name and a different data path, and never touches `~/.rustotpony`.
+- *macOS and Linux.* The same code runs on both; only the clipboard tool and config path differ.
 - *Safe storage.* It uses age encryption, so a wrong password gives a clean error and saves are atomic.
 - *Teaches Rust.* Each step introduces a few concepts, with notes alongside.
 

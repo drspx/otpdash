@@ -8,10 +8,10 @@
 otpdash/
 ├── Cargo.toml
 ├── src/
-│   ├── main.rs        CLI (clap), login, password prompts, one-shot commands   ~90 lines
-│   ├── vault.rs       Vault: load/save (age), add/rm/rename/import/export, TOTP ~240 lines (incl. tests)
-│   └── dashboard.rs   Interactive menu: copy, live, add, More… submenu          ~160 lines
-└── spec/              this report
+│   ├── main.rs        CLI (clap), login, password prompts, one-shot commands   ~95 lines
+│   ├── vault.rs       Vault: load/save (age), add/rm/rename/import/export, TOTP ~290 lines (incl. tests)
+│   └── dashboard.rs   Interactive menu: copy, live, add, More… submenu          ~185 lines
+└── spec/              this report (deleted when the app is done; it stays in git history)
 ```
 
 There are three files because there are three concerns:
@@ -81,17 +81,16 @@ This only needs the standard library: no raw terminal mode and no extra crate.
   [*Crate*], [*Ver*], [*Why*],
   [`clap` (derive)], [4], [The standard CLI parser. Subcommands are defined as an `enum`.],
   [`inquire`], [0.9], [Menus (`Select`, which you can filter by typing), `Text`, `Confirm` and `Password`. It draws on stderr.],
-  [`age`], [0.10], [Authenticated passphrase encryption. Files can also be read with the `age` CLI.],
+  [`age`], [0.12], [Authenticated passphrase encryption. Files can also be read with the `age` CLI.],
   [`anyhow`], [1], [One error type. Use `?` everywhere and `.context("…")` for readable messages.],
-  [`totp-lite`], [2], [The RFC 6238 maths.],
-  [`base32`], [0.5], [Decodes secrets.],
+  [`totp-rs`], [6], [The RFC 6238 maths, plus base32 decoding of secrets.],
   [`serde` + `serde_json`], [1], [JSON for both the DB contents and the export files.],
-  [`dirs`], [5], [Gives the platform's config directory.],
+  [`dirs`], [7], [Gives the platform's config directory.],
 )
 
 The clipboard uses OS tools (`pbcopy`, `wl-copy`, `xclip`) through `std::process::Command`, so no crate is needed.
 
-#note[Pinned to `age = "0.10"`, because 0.11 changed the API. Upgrade once everything works (stretch goal).]
+#note[Edition 2024 (Rust 1.85 or newer). Versions are the latest as of 2026-10; `Cargo.lock` pins the exact ones that were tested.]
 
 == Error strategy
 

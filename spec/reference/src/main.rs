@@ -55,7 +55,10 @@ fn main() -> Result<()> {
         Some(Cmd::Rename { old, new }) => v.rename(&old, &new),
         Some(Cmd::Import { file }) => {
             let (added, skipped) = v.import(&std::fs::read_to_string(&file)?)?;
-            println!("Imported {added}, skipped {skipped} existing. Now delete {}", file.display());
+            eprintln!(
+                "Imported {added}, skipped {skipped} existing. Now delete {}",
+                file.display()
+            );
             Ok(())
         }
         Some(Cmd::Export) => {

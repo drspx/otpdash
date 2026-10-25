@@ -52,7 +52,8 @@ In Rust this is `BTreeMap<String, Entry>`:
 
 Because this is standard age, you can always get your data back without #app:
 ```bash
-age -d "~/Library/Application Support/otpdash/db.age"   # brew install age
+age -d "$HOME/Library/Application Support/otpdash/db.age"   # macOS (brew install age)
+age -d "${XDG_CONFIG_HOME:-$HOME/.config}/otpdash/db.age"  # Linux (apt/dnf/pacman install age)
 ```
 
 == Secret normalisation
@@ -65,11 +66,15 @@ RFC 4648 base32 *without* padding.
 
 $ "code" = "HOTP"("key", floor(t / 30)) mod 10^6 $
 
-`totp-lite` implements this, so it takes one call:
+`totp-rs` implements this. Its `Builder` defaults are exactly SHA-1, 6 digits and 30 s:
 
 ```rust
-totp_lite::totp_custom::<totp_lite::Sha1>(30, 6, &key_bytes, unix_seconds)
+let key = totp_rs::Secret::try_from_base32(secret)?;
+totp_rs::Builder::new().with_secret(key).build_noncompliant().generate(unix_seconds)
 ```
+
+`build_noncompliant` skips the RFC 4226 rule that keys are at least 128 bits. Many services
+(and the example `JBSWY3DPEHPK3PXP`) use 80-bit keys, which `build()` would reject.
 
 The seconds left in the current window are `30 - t % 30`. The RFC test vector (appendix B) is
 used as a unit test: the ASCII key `12345678901234567890` (base32 `GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ`) at

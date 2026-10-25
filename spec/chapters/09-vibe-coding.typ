@@ -8,11 +8,12 @@ Yes, another agent can build #app from this report. `.typ` files are plain text,
 as a spec. Paste this into the agent, run from `~/personal_code/otpdash`:
 
 #prompt[Read `spec/main.typ` and every chapter it includes. Build the Rust app it describes in this directory,
-following chapters 2–5. Constraints: `age = "0.10"`, the dependencies in chapter 4 and nothing else, three source
+following chapters 2–5. Constraints: edition 2024, the dependencies and major versions in chapter 4 and nothing else, three source
 files (`main.rs`, `vault.rs`, `dashboard.rs`), and no features that aren't in chapter 2. Do *not* copy
 `spec/reference/`. Write the code step by step and commit after each build-guide step.
 You're done when `cargo test` and `cargo clippy --all-targets` are clean and you've listed which chapter 2
-acceptance items you could verify and which need a human (anything interactive).]
+acceptance items you could verify and which need a human (anything interactive). As the very last commit,
+delete `spec/` (`git rm -r spec`); the report stays in git history.]
 
 If you'd rather just have it working: `cp -r spec/reference/{Cargo.toml,src} .` is the tested result.
 
@@ -27,17 +28,17 @@ To *learn*, have the AI write one step at a time. Read each step and change some
 
 == Prompts, one per step
 
-#prompt[Scaffold a Rust binary `otpdash` with clap (derive), serde (derive), age 0.10, anyhow, base32, dirs, inquire,
-serde_json, totp-lite. Only give me the cargo commands.]
+#prompt[Scaffold a Rust binary `otpdash` (edition 2024) with clap (derive), serde (derive), age, anyhow, dirs, inquire,
+serde_json, totp-rs. Only give me the cargo commands.]
 
 #prompt[Write the clap CLI from chapter 2: an optional subcommand (none = dashboard), plus show/add/rm/rename/import/export/passwd. Use `todo!()` for every command body.]
 
 #prompt[Write `vault.rs`: `Entry`, `Entries = BTreeMap`, `db_path()` with the `OTPDASH_DB` override, `load`/`save` with an age passphrase,
-an atomic tmp+rename write, and the error "wrong password". Add a round-trip test.]
+an atomic tmp+fsync+rename write, and the error "wrong password". Create the DB on first open. Add a round-trip test.]
 
 #prompt[Add a `Vault` struct (path, pass, entries) with open/add/remove/rename/set_password. Every mutating method saves.]
 
-#prompt[Add TOTP with totp-lite (SHA-1, 30 s, 6 digits), `normalize`, `code_for`, and `lines(filter, t)` that returns
+#prompt[Add TOTP with totp-rs (`Builder` defaults: SHA-1, 30 s, 6 digits; `build_noncompliant` so 80-bit secrets work), `normalize`, `code_for`, and `lines(filter, t)` that returns
 padded `CODE  NAME  USER` strings. Add the RFC 6238 test vector as a test.]
 
 #prompt[Write `main.rs`: log in with inquire (a new password asked twice if there's no DB yet), then dispatch the one-shot commands to Vault methods.]

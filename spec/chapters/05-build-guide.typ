@@ -16,11 +16,11 @@ tested reference files (chapter 11), so it is known to work.
 
 ```bash
 cd ~/personal_code/otpdash            # spec/ already lives here
-cargo init --name otpdash
+cargo init --name otpdash             # the git repo already exists, so cargo leaves it alone
 cargo add clap --features derive
 cargo add serde --features derive
-cargo add age@0.10 anyhow base32 dirs inquire serde_json totp-lite
-git init && git add . && git commit -m "chore: scaffold"
+cargo add age anyhow dirs inquire serde_json totp-rs
+git add . && git commit -m "chore: scaffold"
 ```
 
 #note[`cargo add` edits `Cargo.toml` for you. Commit `Cargo.lock`: for a binary, it pins the exact
@@ -63,6 +63,7 @@ Create `src/vault.rs`, and add `mod vault;` at the top of `main.rs`.
   - *`?`*: if the value is `Err`, return it from the function. Otherwise unwrap the `Ok` value. `anyhow` accepts any error type.
   - `&Path` / `&str` / `&Entries` are *shared borrows*: `save` only reads them.
   - `&mut encrypted` is an *exclusive borrow*: while `writer` is alive, nothing else can touch `encrypted`.
+  - `sync_all` (fsync) forces the bytes onto the disk before the rename. Without it, a power cut could leave an empty file.
   - `rename` is atomic. If the program crashes, you have either the old file or the new one, never half of one.
 ]
 
@@ -93,6 +94,7 @@ Then load it with a wrong password and read the error.]
   - `Self { path, pass, entries }` uses *field init shorthand*, because the variable names match the field names.
   - `rename` = `remove` + `insert`. Because the name only exists as the map key, there is no second copy of it to update.
   - `path` and `pass` are private. Outside code can't change them without going through methods that save.
+  - `open` saves straight away when the file doesn't exist yet, so the first run's password is the one that sticks.
 ]
 
 == Step 7: TOTP and the code list
@@ -105,6 +107,7 @@ Then load it with a wrong password and read the error.]
   - In `lines`, each `map` produces a `Result<String>`. Collecting an iterator of `Result`s *into* `Result<Vec<_>>`
     gives you the first error, or a `Vec` of everything if there were none.
   - `{name:<w$}` left-aligns `name`, padded to the width held in the variable `w`.
+  - `generate` returns a `Token`; `.to_string()` formats it with leading zeros (`012345`).
 ]
 
 #task[Write the `rfc6238_vector` test from chapter 6 now, before you trust any code it prints.]
@@ -184,5 +187,4 @@ the "check whether Enter was pressed".]
 + *Auto-lock*: quit the dashboard if no key is pressed for 5 minutes.
 + *Retry on a wrong password*: three attempts, then exit.
 + *File mode 0600 on `db.age`*: reuse `OpenOptionsExt` in `save`.
-+ *Upgrade to age 0.11*: follow the compiler errors and keep the tests green.
 + *Windows*: put `#[cfg(unix)]` on the `.mode()` line.

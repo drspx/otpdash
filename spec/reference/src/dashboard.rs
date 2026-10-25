@@ -1,5 +1,5 @@
-use crate::vault::{now, seconds_left, Vault};
-use anyhow::{bail, Result};
+use crate::vault::{Vault, now, seconds_left};
+use anyhow::{Result, bail};
 use inquire::{Confirm, InquireError, Select, Text};
 use std::io::Write;
 use std::process::{Command, Stdio};
@@ -25,7 +25,9 @@ pub fn run(v: &mut Vault) -> Result<()> {
         draw(v, &status)?;
         let choice = match Select::new("Action:", vec![COPY, LIVE, ADD, MORE, QUIT]).prompt() {
             Ok(c) => c,
-            Err(InquireError::OperationCanceled | InquireError::OperationInterrupted) => return Ok(()),
+            Err(InquireError::OperationCanceled | InquireError::OperationInterrupted) => {
+                return Ok(());
+            }
             Err(e) => return Err(e.into()),
         };
         let result = match choice {
@@ -48,7 +50,10 @@ fn more(v: &mut Vault) -> Result<String> {
     match Select::new("More:", vec![REMOVE, RENAME, IMPORT, EXPORT, PASSWD, BACK]).prompt()? {
         REMOVE => {
             let name = pick(v, "Remove which?")?;
-            if !Confirm::new(&format!("Really remove '{name}'?")).with_default(false).prompt()? {
+            if !Confirm::new(&format!("Really remove '{name}'?"))
+                .with_default(false)
+                .prompt()?
+            {
                 return Ok(String::new());
             }
             v.remove(&name)?;
@@ -63,7 +68,9 @@ fn more(v: &mut Vault) -> Result<String> {
         IMPORT => {
             let path = Text::new("Export file to import:").prompt()?;
             let (added, skipped) = v.import(&std::fs::read_to_string(&path)?)?;
-            Ok(format!("Imported {added}, skipped {skipped} existing. Delete {path} now."))
+            Ok(format!(
+                "Imported {added}, skipped {skipped} existing. Delete {path} now."
+            ))
         }
         EXPORT => export(v),
         PASSWD => {
@@ -106,14 +113,25 @@ fn copy_code(v: &Vault) -> Result<String> {
     let name = pick(v, "Copy which? (type to filter)")?;
     let t = now();
     copy_to_clipboard(&v.code_for(&name, t)?)?;
-    Ok(format!("Copied code for '{name}', valid {}s.", seconds_left(t)))
+    Ok(format!(
+        "Copied code for '{name}', valid {}s.",
+        seconds_left(t)
+    ))
 }
 
 // ponytail: shells out to the OS clipboard tool; switch to the `arboard` crate if this list falls short
 fn copy_to_clipboard(text: &str) -> Result<()> {
-    let tools: [&[&str]; 3] = [&["pbcopy"], &["wl-copy"], &["xclip", "-selection", "clipboard"]];
+    let tools: [&[&str]; 3] = [
+        &["pbcopy"],
+        &["wl-copy"],
+        &["xclip", "-selection", "clipboard"],
+    ];
     for tool in tools {
-        if let Ok(mut child) = Command::new(tool[0]).args(&tool[1..]).stdin(Stdio::piped()).spawn() {
+        if let Ok(mut child) = Command::new(tool[0])
+            .args(&tool[1..])
+            .stdin(Stdio::piped())
+            .spawn()
+        {
             child.stdin.take().unwrap().write_all(text.as_bytes())?;
             child.wait()?;
             return Ok(());
@@ -139,7 +157,9 @@ fn live(v: &Vault) -> Result<String> {
 
 fn export(v: &Vault) -> Result<String> {
     use std::os::unix::fs::OpenOptionsExt;
-    let path = Text::new("Export to file:").with_default("otpdash-export.json").prompt()?;
+    let path = Text::new("Export to file:")
+        .with_default("otpdash-export.json")
+        .prompt()?;
     if !Confirm::new("The file will contain ALL secrets in plaintext. Continue?")
         .with_default(false)
         .prompt()?
@@ -152,7 +172,9 @@ fn export(v: &Vault) -> Result<String> {
         .mode(0o600) // readable by you only
         .open(&path)?
         .write_all(v.export()?.as_bytes())?;
-    Ok(format!("Exported to {path}. Keep it safe, delete it when done."))
+    Ok(format!(
+        "Exported to {path}. Keep it safe, delete it when done."
+    ))
 }
 
 fn cancelled(e: &anyhow::Error) -> bool {

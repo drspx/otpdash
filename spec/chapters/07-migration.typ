@@ -21,13 +21,14 @@ cargo install --path .                 # installs ~/.cargo/bin/otpdash
 umask 077                              # export file readable only by you
 totp export > /tmp/old.json            # enter the RusTOTPony password
 otpdash import /tmp/old.json              # first run: choose a NEW password
-rm -P /tmp/old.json                    # macOS: overwrite and delete (Linux: shred -u)
+rm /tmp/old.json                       # see the warning below
 
 otpdash                                   # dashboard: compare a few codes with `totp`
 ```
 
 #warn[`totp export` prints *every secret in plaintext*. Keep the file in `/tmp`, never in a synced or
-git-tracked folder, and delete it right after the import.]
+git-tracked folder, and delete it right after the import. Don't rely on `rm -P` (a no-op on current macOS) or
+`shred` (unreliable on SSDs and journaling file systems); full-disk encryption (FileVault, LUKS) is what protects deleted data.]
 
 == Retiring #old (when you're confident)
 
