@@ -23,7 +23,10 @@ pub fn run(v: &mut Vault) -> Result<()> {
     let mut status = String::new();
     loop {
         draw(v, &status)?;
-        let choice = match Select::new("Action:", vec![COPY, LIVE, ADD, MORE, QUIT]).prompt() {
+        let choice = match Select::new("Action:", vec![COPY, LIVE, ADD, MORE, QUIT])
+            .with_vim_mode(true)
+            .prompt()
+        {
             Ok(c) => c,
             Err(InquireError::OperationCanceled | InquireError::OperationInterrupted) => {
                 return Ok(());
@@ -47,7 +50,10 @@ pub fn run(v: &mut Vault) -> Result<()> {
 }
 
 fn more(v: &mut Vault) -> Result<String> {
-    match Select::new("More:", vec![REMOVE, RENAME, IMPORT, EXPORT, PASSWD, BACK]).prompt()? {
+    match Select::new("More:", vec![REMOVE, RENAME, IMPORT, EXPORT, PASSWD, BACK])
+        .with_vim_mode(true)
+        .prompt()?
+    {
         REMOVE => {
             let name = pick(v, "Remove which?")?;
             if !Confirm::new(&format!("Really remove '{name}'?"))
@@ -99,7 +105,9 @@ fn pick(v: &Vault, msg: &str) -> Result<String> {
     if v.entries.is_empty() {
         bail!("no entries yet");
     }
-    Ok(Select::new(msg, v.entries.keys().cloned().collect()).prompt()?)
+    Ok(Select::new(msg, v.entries.keys().cloned().collect())
+        .with_vim_mode(true)
+        .prompt()?)
 }
 
 fn add(v: &mut Vault) -> Result<String> {

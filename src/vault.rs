@@ -1,4 +1,3 @@
-
 use age::secrecy::SecretString;
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
@@ -38,7 +37,7 @@ pub struct Vault {
 impl Vault {
     pub fn open(path: PathBuf, pass: String) -> Result<Self> {
         let v = Self {
-            entries: load(&path, &pass)?,
+            entries: crate::spin("Unlocking…", || load(&path, &pass))?,
             path,
             pass,
         };
@@ -49,7 +48,7 @@ impl Vault {
     }
 
     fn save(&self) -> Result<()> {
-        save(&self.path, &self.pass, &self.entries)
+        crate::spin("Saving…", || save(&self.path, &self.pass, &self.entries))
     }
 
     pub fn add(&mut self, name: &str, username: &str, secret: &str) -> Result<()> {
