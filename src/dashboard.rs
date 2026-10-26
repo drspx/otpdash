@@ -1,14 +1,17 @@
 use crate::vault::{Vault, now, seconds_left};
 use anyhow::{Result, bail};
 use crossterm::{
-    ExecutableCommand,
     cursor::MoveTo,
-    terminal::{Clear, ClearType},
+    event::{self, Event},
+    execute,
+    terminal::{
+        Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode,
+        enable_raw_mode,
+    },
 };
 use inquire::{Confirm, InquireError, Select, Text};
 use std::io::{Write, stdout};
 use std::process::{Command, Stdio};
-use std::sync::mpsc;
 use std::time::Duration;
 
 const COPY: &str = "Copy a code";
@@ -24,13 +27,23 @@ const EXPORT: &str = "Export";
 const PASSWD: &str = "Change password";
 const BACK: &str = "Back";
 
-fn clear_screen() {
-    stdout().execute(Clear(ClearType::All)).unwrap();
-    stdout().execute(Clear(ClearType::Purge)).unwrap();
-    stdout().execute(MoveTo(0, 0)).unwrap();
+struct AltScreen;
+
+impl AltScreen {
+    fn enter() -> Result<Self> {
+        execute!(stdout(), EnterAlternateScreen)?;
+        Ok(AltScreen)
+    }
+}
+
+impl Drop for AltScreen {
+    fn drop(&mut self) {
+        let _ = execute!(stdout(), LeaveAlternateScreen);
+    }
 }
 
 pub fn run(v: &mut Vault) -> Result<()> {
+    let _screen = AltScreen::enter();
     let mut status = String::new();
     loop {
         draw(v, &status)?;
@@ -40,7 +53,6 @@ pub fn run(v: &mut Vault) -> Result<()> {
         {
             Ok(c) => c,
             Err(InquireError::OperationCanceled | InquireError::OperationInterrupted) => {
-                clear_screen();
                 return Ok(());
             }
             Err(e) => return Err(e.into()),
@@ -51,10 +63,7 @@ pub fn run(v: &mut Vault) -> Result<()> {
             ADD => add(v),
             MORE => more(v),
             _ => {
-                return {
-                    clear_screen();
-                    Ok(())
-                };
+                return Ok(());
             }
         };
         // Esc inside an action just goes back to the menu; real errors are shown, not fatal
@@ -106,7 +115,7 @@ fn more(v: &mut Vault) -> Result<String> {
 
 fn draw(v: &Vault, status: &str) -> Result<()> {
     let t = now();
-    clear_screen();
+    execute!(stdout(), Clear(ClearType::All), MoveTo(0, 0))?;
     println!("otpdash · codes valid for {}s\n", seconds_left(t));
     if v.entries.is_empty() {
         println!("  (no entries: use Add, or More… → Import)");
@@ -115,6 +124,7 @@ fn draw(v: &Vault, status: &str) -> Result<()> {
         println!("  {line}");
     }
     println!("\n{status}");
+    stdout().flush()?;
     Ok(())
 }
 
@@ -166,18 +176,25 @@ fn copy_to_clipboard(text: &str) -> Result<()> {
 }
 
 fn live(v: &Vault) -> Result<String> {
-    // A thread waits for Enter while the main thread redraws once per second.
-    let (tx, rx) = mpsc::channel();
-    std::thread::spawn(move || {
-        let _ = std::io::stdin().read_line(&mut String::new());
-        let _ = tx.send(());
-    });
     loop {
-        draw(v, "Live. Press Enter to go back.")?;
-        if rx.recv_timeout(Duration::from_secs(1)).is_ok() {
+        draw(v, "Live. press any key to go back")?;
+        if key_pressed_within(Duration::from_secs(1))? {
             return Ok(String::new());
         }
     }
+}
+
+fn key_pressed_within(timeout: Duration) -> Result<bool> {
+    enable_raw_mode()?;
+    let pressed = event::poll(timeout).and_then(|ready| {
+        if ready {
+            event::read().map(|e| matches!(e, Event::Key(_)))
+        } else {
+            Ok(false)
+        }
+    });
+    disable_raw_mode()?;
+    Ok(pressed?)
 }
 
 fn export(v: &Vault) -> Result<String> {
