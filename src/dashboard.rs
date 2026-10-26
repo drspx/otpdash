@@ -43,7 +43,7 @@ impl Drop for AltScreen {
 }
 
 pub fn run(v: &mut Vault) -> Result<()> {
-    let _screen = AltScreen::enter();
+    let _screen = AltScreen::enter()?;
     let mut status = String::new();
     loop {
         draw(v, &status)?;
