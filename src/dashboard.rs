@@ -1,7 +1,12 @@
 use crate::vault::{Vault, now, seconds_left};
 use anyhow::{Result, bail};
+use crossterm::{
+    ExecutableCommand,
+    cursor::MoveTo,
+    terminal::{Clear, ClearType},
+};
 use inquire::{Confirm, InquireError, Select, Text};
-use std::io::Write;
+use std::io::{Write, stdout};
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
 use std::time::Duration;
@@ -19,6 +24,12 @@ const EXPORT: &str = "Export";
 const PASSWD: &str = "Change password";
 const BACK: &str = "Back";
 
+fn clear_screen() {
+    stdout().execute(Clear(ClearType::All)).unwrap();
+    stdout().execute(Clear(ClearType::Purge)).unwrap();
+    stdout().execute(MoveTo(0, 0)).unwrap();
+}
+
 pub fn run(v: &mut Vault) -> Result<()> {
     let mut status = String::new();
     loop {
@@ -29,6 +40,7 @@ pub fn run(v: &mut Vault) -> Result<()> {
         {
             Ok(c) => c,
             Err(InquireError::OperationCanceled | InquireError::OperationInterrupted) => {
+                clear_screen();
                 return Ok(());
             }
             Err(e) => return Err(e.into()),
@@ -38,7 +50,12 @@ pub fn run(v: &mut Vault) -> Result<()> {
             LIVE => live(v),
             ADD => add(v),
             MORE => more(v),
-            _ => return Ok(()),
+            _ => {
+                return {
+                    clear_screen();
+                    Ok(())
+                };
+            }
         };
         // Esc inside an action just goes back to the menu; real errors are shown, not fatal
         status = match result {
@@ -89,7 +106,7 @@ fn more(v: &mut Vault) -> Result<String> {
 
 fn draw(v: &Vault, status: &str) -> Result<()> {
     let t = now();
-    print!("\x1B[2J\x1B[H"); // clear screen, cursor to top-left
+    clear_screen();
     println!("otpdash · codes valid for {}s\n", seconds_left(t));
     if v.entries.is_empty() {
         println!("  (no entries: use Add, or More… → Import)");

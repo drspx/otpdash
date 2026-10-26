@@ -1168,6 +1168,7 @@ dependencies = [
  "age",
  "anyhow",
  "clap",
+ "crossterm",
  "dirs",
  "inquire",
  "serde",
