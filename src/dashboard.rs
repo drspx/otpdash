@@ -12,6 +12,10 @@ use crossterm::{
     },
 };
 use inquire::{Confirm, InquireError, Select, Text};
+use signal_hook::{
+    consts::{SIGHUP, SIGINT, SIGTERM},
+    iterator::Signals,
+};
 use std::io::{Write, stdout};
 use std::process::{Command, Stdio};
 use std::time::Duration;
@@ -28,6 +32,14 @@ struct AltScreen;
 impl AltScreen {
     fn enter() -> Result<Self> {
         execute!(stdout(), EnterAlternateScreen)?;
+        let mut signals = Signals::new([SIGTERM, SIGHUP, SIGINT])?;
+        std::thread::spawn(move || {
+            if let Some(sig) = signals.forever().next() {
+                let _ = disable_raw_mode();
+                let _ = execute!(stdout(), Clear(ClearType::All), LeaveAlternateScreen);
+                std::process::exit(128 + sig)
+            }
+        });
         Ok(AltScreen)
     }
 }
