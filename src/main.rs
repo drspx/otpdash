@@ -7,9 +7,14 @@ use inquire::{Password, PasswordDisplayMode};
 use std::path::PathBuf;
 use vault::Vault;
 
+const VERSION: &str = match option_env!("OTPDASH_VERSION") {
+    Some(v) => v,
+    None => env!("CARGO_PKG_VERSION"),
+};
+
 /// Minimal TOTP manager. Run without a command to open the dashboard.
 #[derive(Parser)]
-#[command(version)]
+#[command(version = VERSION)]
 struct Cli {
     #[command(subcommand)]
     cmd: Option<Cmd>,

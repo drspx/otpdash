@@ -1,3 +1,4 @@
+use crate::VERSION;
 use crate::vault::{Vault, now, seconds_left};
 use anyhow::{Result, bail};
 use crossterm::{
@@ -116,6 +117,8 @@ fn more(v: &mut Vault) -> Result<String> {
 fn draw(v: &Vault, status: &str) -> Result<()> {
     let t = now();
     execute!(stdout(), Clear(ClearType::All), MoveTo(0, 0))?;
+    println!("otpdash version {VERSION}");
+    println!();
     println!("otpdash · codes valid for {}s\n", seconds_left(t));
     if v.entries.is_empty() {
         println!("  (no entries: use Add, or More… → Import)");
