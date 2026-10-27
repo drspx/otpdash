@@ -21,20 +21,21 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
-      - run: cargo build --release --locked --target ${{ matrix.target }}
+      # tag v1.2.3 -> OTPDASH_VERSION=1.2.3, read by option_env! in main.rs
+      - run: OTPDASH_VERSION=${GITHUB_REF_NAME#v} cargo build --release --locked --target ${{ matrix.target }}
 
       - name: Package binary
         run: |
           tar czf otpdash-${{ github.ref_name }}-${{ matrix.target }}.tar.gz \
             -C target/${{ matrix.target }}/release otpdash
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.target }}
           path: otpdash-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
@@ -45,14 +46,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           pattern: release-*
           merge-multiple: true
 
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: dist/*.tar.gz
           fail_on_unmatched_files: true
+          generate_release_notes: true
 

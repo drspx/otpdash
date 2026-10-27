@@ -1,8 +1,10 @@
+use crate::VERSION;
 use crate::vault::{Vault, now, seconds_left};
 use anyhow::{Result, bail};
+use crossterm::event::KeyModifiers;
 use crossterm::{
     cursor::MoveTo,
-    event::{self, Event},
+    event::{self, Event, KeyCode},
     execute,
     terminal::{
         Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode,
@@ -10,15 +12,13 @@ use crossterm::{
     },
 };
 use inquire::{Confirm, InquireError, Select, Text};
+use signal_hook::{
+    consts::{SIGHUP, SIGINT, SIGTERM},
+    iterator::Signals,
+};
 use std::io::{Write, stdout};
 use std::process::{Command, Stdio};
 use std::time::Duration;
-
-const COPY: &str = "Copy a code";
-const LIVE: &str = "Live codes";
-const ADD: &str = "Add";
-const MORE: &str = "More…";
-const QUIT: &str = "Quit";
 
 const REMOVE: &str = "Remove";
 const RENAME: &str = "Rename";
@@ -32,6 +32,14 @@ struct AltScreen;
 impl AltScreen {
     fn enter() -> Result<Self> {
         execute!(stdout(), EnterAlternateScreen)?;
+        let mut signals = Signals::new([SIGTERM, SIGHUP, SIGINT])?;
+        std::thread::spawn(move || {
+            if let Some(sig) = signals.forever().next() {
+                let _ = disable_raw_mode();
+                let _ = execute!(stdout(), Clear(ClearType::All), LeaveAlternateScreen);
+                std::process::exit(128 + sig)
+            }
+        });
         Ok(AltScreen)
     }
 }
@@ -46,25 +54,14 @@ pub fn run(v: &mut Vault) -> Result<()> {
     let _screen = AltScreen::enter()?;
     let mut status = String::new();
     loop {
-        draw(v, &status)?;
-        let choice = match Select::new("Action:", vec![COPY, LIVE, ADD, MORE, QUIT])
-            .with_vim_mode(true)
-            .prompt()
-        {
-            Ok(c) => c,
-            Err(InquireError::OperationCanceled | InquireError::OperationInterrupted) => {
-                return Ok(());
-            }
-            Err(e) => return Err(e.into()),
-        };
+        draw(v, &format!("{status}\nc copy · a add · m more · q quit"))?;
+        let choice = key_within(Duration::from_secs(1))?;
         let result = match choice {
-            COPY => copy_code(v),
-            LIVE => live(v),
-            ADD => add(v),
-            MORE => more(v),
-            _ => {
-                return Ok(());
-            }
+            Some(KeyCode::Char('c')) => copy_code(v),
+            Some(KeyCode::Char('a')) => add(v),
+            Some(KeyCode::Char('m')) => more(v),
+            Some(KeyCode::Char('q') | KeyCode::Esc) => return Ok(()),
+            _ => continue,
         };
         // Esc inside an action just goes back to the menu; real errors are shown, not fatal
         status = match result {
@@ -116,6 +113,8 @@ fn more(v: &mut Vault) -> Result<String> {
 fn draw(v: &Vault, status: &str) -> Result<()> {
     let t = now();
     execute!(stdout(), Clear(ClearType::All), MoveTo(0, 0))?;
+    println!("otpdash version {VERSION}");
+    println!();
     println!("otpdash · codes valid for {}s\n", seconds_left(t));
     if v.entries.is_empty() {
         println!("  (no entries: use Add, or More… → Import)");
@@ -175,26 +174,26 @@ fn copy_to_clipboard(text: &str) -> Result<()> {
     bail!("no clipboard tool found (pbcopy, wl-copy or xclip)")
 }
 
-fn live(v: &Vault) -> Result<String> {
-    loop {
-        draw(v, "Live. press any key to go back")?;
-        if key_pressed_within(Duration::from_secs(1))? {
-            return Ok(String::new());
-        }
-    }
-}
-
-fn key_pressed_within(timeout: Duration) -> Result<bool> {
+fn key_within(timeout: Duration) -> Result<Option<KeyCode>> {
     enable_raw_mode()?;
-    let pressed = event::poll(timeout).and_then(|ready| {
+    let key = event::poll(timeout).and_then(|ready| {
         if ready {
-            event::read().map(|e| matches!(e, Event::Key(_)))
+            event::read().map(|e| match e {
+                Event::Key(k)
+                    if k.code == KeyCode::Char('c')
+                        && k.modifiers.contains(KeyModifiers::CONTROL) =>
+                {
+                    Some(KeyCode::Esc)
+                }
+                Event::Key(k) => Some(k.code),
+                _ => None,
+            })
         } else {
-            Ok(false)
+            Ok(None)
         }
     });
     disable_raw_mode()?;
-    Ok(pressed?)
+    Ok(key?)
 }
 
 fn export(v: &Vault) -> Result<String> {
