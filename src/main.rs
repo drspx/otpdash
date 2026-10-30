@@ -34,6 +34,12 @@ enum Cmd {
     Rm { name: String },
     /// Rename a generator
     Rename { old: String, new: String },
+    /// Change a generator's username (omit USERNAME to clear it)
+    User {
+        name: String,
+        #[arg(default_value = "")]
+        username: String,
+    },
     /// Import an otpdash or RusTOTPony export file
     Import { file: PathBuf },
     /// Print all generators as plaintext JSON
@@ -58,6 +64,7 @@ fn main() -> Result<()> {
         Some(Cmd::Add { name, username }) => v.add(&name, &username, &prompt_secret()?),
         Some(Cmd::Rm { name }) => v.remove(&name),
         Some(Cmd::Rename { old, new }) => v.rename(&old, &new),
+        Some(Cmd::User { name, username }) => v.set_username(&name, &username),
         Some(Cmd::Import { file }) => {
             let (added, skipped) = v.import(&std::fs::read_to_string(&file)?)?;
             eprintln!(

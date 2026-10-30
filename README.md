@@ -18,7 +18,7 @@ Run `otpdash` with no arguments to open the live dashboard. Codes refresh every 
 |-----|--------|
 | `c` | copy a code to the clipboard |
 | `a` | add a generator |
-| `m` | more: remove, rename, import, export, change password |
+| `m` | more: remove, rename, change username, import, export, change password |
 | `q` / `Esc` | quit |
 
 Commands:
@@ -28,6 +28,7 @@ otpdash show [FILTER]        # print codes
 otpdash add NAME [USERNAME]  # secret is prompted, never an argument
 otpdash rm NAME
 otpdash rename OLD NEW
+otpdash user NAME [USERNAME]
 otpdash import FILE          # otpdash or RusTOTPony export
 otpdash export               # plaintext JSON, handle with care
 otpdash passwd
