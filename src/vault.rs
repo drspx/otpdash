@@ -82,6 +82,14 @@ impl Vault {
         self.save()
     }
 
+    pub fn set_username(&mut self, name: &str, username: &str) -> Result<()> {
+        self.entries
+            .get_mut(name)
+            .with_context(|| format!("'{name}' not found"))?
+            .username = username.to_string();
+        self.save()
+    }
+
     pub fn set_password(&mut self, pass: String) -> Result<()> {
         self.pass = pass;
         self.save()
@@ -139,26 +147,29 @@ impl Vault {
         code(&e.secret, t)
     }
 
-    /// `CODE  NAME  USERNAME` lines, names padded to one width, filtered case-insensitively.
-    pub fn lines(&self, filter: &str, t: u64) -> Result<Vec<String>> {
+    /// `[code, name, username]` rows, filtered case-insensitively by name.
+    pub fn rows(&self, filter: &str, t: u64) -> Result<Vec<[String; 3]>> {
         let f = filter.to_lowercase();
+        self.entries
+            .iter()
+            .filter(|(name, _)| name.to_lowercase().contains(&f))
+            .map(|(name, e)| Ok([code(&e.secret, t)?, name.clone(), e.username.clone()]))
+            .collect()
+    }
+
+    /// `CODE  NAME  USERNAME` lines, names padded to one width.
+    pub fn lines(&self, filter: &str, t: u64) -> Result<Vec<String>> {
         let w = self
             .entries
             .keys()
             .map(|k| k.chars().count())
             .max()
             .unwrap_or(0);
-        self.entries
-            .iter()
-            .filter(|(name, _)| name.to_lowercase().contains(&f))
-            .map(|(name, e)| {
-                Ok(format!(
-                    "{}  {name:<w$}  {}",
-                    code(&e.secret, t)?,
-                    e.username
-                ))
-            })
-            .collect()
+        Ok(self
+            .rows(filter, t)?
+            .into_iter()
+            .map(|[c, n, u]| format!("{c}  {n:<w$}  {u}"))
+            .collect())
     }
 }
 
@@ -265,10 +276,13 @@ mod tests {
         assert!(v.path.exists(), "first open creates the DB");
         v.add("github", "me", "jbsw y3dp ehpk 3pxp").unwrap();
         v.rename("github", "gh").unwrap();
+        v.set_username("gh", "you").unwrap();
+        assert!(v.set_username("nope", "x").is_err());
         assert!(v.rename("nope", "x").is_err());
 
         let reopened = Vault::open(v.path.clone(), "pw".into()).unwrap();
         assert_eq!(reopened.entries["gh"].secret, "JBSWY3DPEHPK3PXP");
+        assert_eq!(reopened.entries["gh"].username, "you");
         assert!(Vault::open(v.path.clone(), "wrong".into()).is_err());
 
         v.set_password("new".into()).unwrap();

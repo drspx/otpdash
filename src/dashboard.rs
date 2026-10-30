@@ -19,9 +19,11 @@ use signal_hook::{
 use std::io::{Write, stdout};
 use std::process::{Command, Stdio};
 use std::time::Duration;
+use unicode_width::UnicodeWidthStr;
 
 const REMOVE: &str = "Remove";
 const RENAME: &str = "Rename";
+const USER: &str = "Change username";
 const IMPORT: &str = "Import";
 const EXPORT: &str = "Export";
 const PASSWD: &str = "Change password";
@@ -73,9 +75,12 @@ pub fn run(v: &mut Vault) -> Result<()> {
 }
 
 fn more(v: &mut Vault) -> Result<String> {
-    match Select::new("More:", vec![REMOVE, RENAME, IMPORT, EXPORT, PASSWD, BACK])
-        .with_vim_mode(true)
-        .prompt()?
+    match Select::new(
+        "More:",
+        vec![REMOVE, RENAME, USER, IMPORT, EXPORT, PASSWD, BACK],
+    )
+    .with_vim_mode(true)
+    .prompt()?
     {
         REMOVE => {
             let name = pick(v, "Remove which?")?;
@@ -93,6 +98,14 @@ fn more(v: &mut Vault) -> Result<String> {
             let new = Text::new("New name:").with_initial_value(&old).prompt()?;
             v.rename(&old, &new)?;
             Ok(format!("Renamed '{old}' to '{new}'."))
+        }
+        USER => {
+            let name = pick(v, "Change username of which?")?;
+            let user = Text::new("Username:")
+                .with_initial_value(&v.entries[&name].username)
+                .prompt()?;
+            v.set_username(&name, &user)?;
+            Ok(format!("Username of '{name}' set to '{user}'."))
         }
         IMPORT => {
             let path = Text::new("Export file to import:").prompt()?;
@@ -119,12 +132,43 @@ fn draw(v: &Vault, status: &str) -> Result<()> {
     if v.entries.is_empty() {
         println!("  (no entries: use Add, or More… → Import)");
     }
-    for line in v.lines("", t)? {
+    for line in table(&v.rows("", t)?) {
         println!("  {line}");
     }
     println!("\n{status}");
     stdout().flush()?;
     Ok(())
+}
+
+/// Box with column separators and a header rule; no lines between rows.
+fn table(rows: &[[String; 3]]) -> Vec<String> {
+    let head = ["Code", "Name", "Username"].map(String::from);
+    let w: Vec<usize> = (0..3)
+        .map(|i| {
+            rows.iter()
+                .chain([&head])
+                .map(|r| r[i].width())
+                .max()
+                .unwrap()
+        })
+        .collect();
+    let rule = |l: &str, m: &str, r: &str| {
+        let segs: Vec<String> = w.iter().map(|n| "─".repeat(n + 2)).collect();
+        format!("{l}{}{r}", segs.join(m))
+    };
+    let row = |r: &[String; 3]| {
+        let cells: Vec<String> = r
+            .iter()
+            .zip(&w)
+            // format!'s padding counts chars, not terminal columns, so pad by display width
+            .map(|(s, n)| format!(" {s}{} ", " ".repeat(n - s.width())))
+            .collect();
+        format!("│{}│", cells.join("│"))
+    };
+    let mut out = vec![rule("┌", "┬", "┐"), row(&head), rule("├", "┼", "┤")];
+    out.extend(rows.iter().map(row));
+    out.push(rule("└", "┴", "┘"));
+    out
 }
 
 fn pick(v: &Vault, msg: &str) -> Result<String> {
@@ -223,4 +267,32 @@ fn cancelled(e: &anyhow::Error) -> bool {
         e.downcast_ref::<InquireError>(),
         Some(InquireError::OperationCanceled | InquireError::OperationInterrupted)
     )
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn table_boxes_columns_only() {
+        let t = super::table(&[["123456".into(), "gh".into(), "me".into()]]);
+        assert_eq!(
+            t,
+            [
+                "┌────────┬──────┬──────────┐",
+                "│ Code   │ Name │ Username │",
+                "├────────┼──────┼──────────┤",
+                "│ 123456 │ gh   │ me       │",
+                "└────────┴──────┴──────────┘",
+            ]
+        );
+    }
+
+    #[test]
+    fn table_aligns_wide_and_nordic_chars() {
+        let t = super::table(&[
+            ["111111".into(), "blåbær".into(), "ø".into()],
+            ["222222".into(), "日本".into(), "😀".into()],
+        ]);
+        assert_eq!(t[3], "│ 111111 │ blåbær │ ø        │");
+        assert_eq!(t[4], "│ 222222 │ 日本   │ 😀       │");
+    }
 }
