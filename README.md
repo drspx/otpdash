@@ -10,6 +10,15 @@ Download a binary from [Releases](https://github.com/drspx/otpdash/releases), or
 cargo install --git https://github.com/drspx/otpdash
 ```
 
+NixOS, in `configuration.nix`:
+
+```nix
+environment.systemPackages = [
+  (pkgs.callPackage "${builtins.fetchTarball "https://github.com/drspx/otpdash/archive/master.tar.gz"}/package.nix" { })
+  pkgs.wl-clipboard # or pkgs.xclip on X11, needed for copy
+];
+```
+
 ## Usage
 
 Run `otpdash` with no arguments to open the live dashboard. Codes refresh every second.
